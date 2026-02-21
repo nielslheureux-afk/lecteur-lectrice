@@ -215,11 +215,13 @@ def is_word_file(uploaded_file):
 
 # ─── Réinitialisation ────────────────────────────────────────────────────────
 def reset_tab(tab_key):
-    keys_to_clear = [f"result_{tab_key}", f"cycle_{tab_key}",
-                     f"file_{tab_key}", f"text_{tab_key}"]
-    for k in keys_to_clear:
-        if k in st.session_state:
-            del st.session_state[k]
+    # Incrémenter un compteur force Streamlit à recréer les widgets avec de nouvelles clés
+    counter_key = f"reset_counter_{tab_key}"
+    st.session_state[counter_key] = st.session_state.get(counter_key, 0) + 1
+    # Nettoyer le résultat
+    result_key = f"result_{tab_key}"
+    if result_key in st.session_state:
+        del st.session_state[result_key]
     st.rerun()
 
 # ─── Interface ────────────────────────────────────────────────────────────────
@@ -239,19 +241,22 @@ Son usage est pédagogique, gratuit et non commercial — il a vocation à encou
 tab_auto, tab_manual = st.tabs(["🤖 Stratégie automatique — l'IA choisit", "🎯 Stratégie choisie — je choisis"])
 
 def render_tab(tab_key, is_manual=False):
+    # Compteur de reset : chaque incrément force de nouvelles clés de widgets → tout se vide
+    rc = st.session_state.get(f"reset_counter_{tab_key}", 0)
+
     # ── Ligne config : Cycle + bouton Réinitialiser ──────────────────────────
     col_cycle, col_reset = st.columns([4, 1])
     with col_cycle:
-        cycle = st.selectbox("Cycle", CYCLES, index=1, key=f"cycle_{tab_key}")
+        cycle = st.selectbox("Cycle", CYCLES, index=1, key=f"cycle_{tab_key}_{rc}")
     with col_reset:
         st.markdown("<div style='margin-top:28px'>", unsafe_allow_html=True)
-        if st.button("🔄 Réinitialiser", key=f"reset_{tab_key}", help="Vider le formulaire et recommencer"):
+        if st.button("🔄 Réinitialiser", key=f"reset_{tab_key}_{rc}", help="Vider le formulaire et recommencer"):
             reset_tab(tab_key)
         st.markdown("</div>", unsafe_allow_html=True)
 
     if is_manual:
         strat_options = [f"{k} · {v}" for k, v in STRATEGIES.items()]
-        strat_choice = st.selectbox("🎯 Stratégie à travailler", strat_options, key="strat_select")
+        strat_choice = st.selectbox("🎯 Stratégie à travailler", strat_options, key=f"strat_select_{rc}")
         strat_num = strat_choice[0]
 
     st.markdown("**Support de lecture**")
@@ -260,8 +265,8 @@ def render_tab(tab_key, is_manual=False):
     uploaded = st.file_uploader(
         "PDF, JPEG, PNG, WebP, GIF",
         type=["pdf", "jpg", "jpeg", "png", "webp", "gif", "heic",
-              "docx", "doc", "odt", "rtf"],   # acceptés pour afficher le bon message
-        key=f"file_{tab_key}"
+              "docx", "doc", "odt", "rtf"],
+        key=f"file_{tab_key}_{rc}"
     )
 
     # ── Message personnalisé Word/ODT ─────────────────────────────────────────
@@ -276,11 +281,18 @@ def render_tab(tab_key, is_manual=False):
             puis collez le texte dans la zone ci-dessous 👇
         </div>
         """, unsafe_allow_html=True)
-        uploaded = None   # on ignore le fichier
+        uploaded = None
 
     st.markdown("<p style='text-align:center; color:#aaa; font-weight:bold; margin:4px 0;'>— OU —</p>",
                 unsafe_allow_html=True)
-    pasted = st.text_area("Collez votre texte ici", height=120, key=f"text_{tab_key}")
+    pasted = st.text_area("Collez votre texte ici", height=120, key=f"text_{tab_key}_{rc}")
+
+    # ── Avertissement conflit fichier + texte ─────────────────────────────────
+    both_filled = uploaded is not None and pasted.strip()
+    if both_filled:
+        st.warning("⚠️ Un fichier **et** du texte collé sont présents. "
+                   "L'appli utilisera uniquement le **fichier**. "
+                   "Videz la zone de texte si vous souhaitez utiliser le texte collé.")
 
     btn_label = "🎯 Générer la fiche avec cette stratégie" if is_manual else "🚀 Lancer l'analyse — l'IA choisit la stratégie"
     color = "#5a3472" if is_manual else "#1a2e4a"
@@ -290,7 +302,7 @@ def render_tab(tab_key, is_manual=False):
         background-color: {color}; color: white;
     }}</style>""", unsafe_allow_html=True)
 
-    if st.button(btn_label, type="primary", key=f"btn_{tab_key}"):
+    if st.button(btn_label, type="primary", key=f"btn_{tab_key}_{rc}"):
         if not uploaded and not pasted.strip():
             st.error("Veuillez charger un fichier ou coller un texte.")
             return
@@ -304,7 +316,9 @@ def render_tab(tab_key, is_manual=False):
                     prompt = build_prompt_auto(cycle)
                     strat_label = " · Stratégie automatique"
 
-                result = call_gemini(prompt, uploaded, pasted.strip() or None)
+                # Priorité au fichier si les deux sont présents
+                effective_text = None if uploaded else pasted.strip() or None
+                result = call_gemini(prompt, uploaded, effective_text)
                 st.session_state[f"result_{tab_key}"] = (result, cycle, strat_label)
             except Exception as e:
                 st.error(f"Erreur Gemini : {e}")
@@ -322,7 +336,7 @@ def render_tab(tab_key, is_manual=False):
             data=docx_bytes,
             file_name=fname,
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            key=f"dl_{tab_key}"
+            key=f"dl_{tab_key}_{rc}"
         )
 
 with tab_auto:
