@@ -44,12 +44,12 @@ st.markdown("""
 
 # ─── Clé API (secret Streamlit) ───────────────────────────────────────────────
 try:
-    API_KEY = st.secrets["GEMINI_API_KEY_2"]
+    API_KEY = st.secrets["GEMINI_API_KEY"]
 except Exception:
     API_KEY = None
 
 if not API_KEY:
-    st.error("⚠️ Clé API Gemini manquante. Ajoutez GEMINI_API_KEY_2 dans les secrets Streamlit.")
+    st.error("⚠️ Clé API Gemini manquante. Ajoutez GEMINI_API_KEY dans les secrets Streamlit.")
     st.stop()
 
 genai.configure(api_key=API_KEY)
@@ -204,6 +204,24 @@ def export_word(content, cycle, strat_label):
     buf.seek(0)
     return buf.read()
 
+# ─── Extensions Word/ODT à détecter par nom de fichier ──────────────────────
+DOCX_EXTENSIONS = {'.docx', '.doc', '.odt', '.rtf'}
+
+def is_word_file(uploaded_file):
+    if uploaded_file is None:
+        return False
+    name = uploaded_file.name.lower()
+    return any(name.endswith(ext) for ext in DOCX_EXTENSIONS)
+
+# ─── Réinitialisation ────────────────────────────────────────────────────────
+def reset_tab(tab_key):
+    keys_to_clear = [f"result_{tab_key}", f"cycle_{tab_key}",
+                     f"file_{tab_key}", f"text_{tab_key}"]
+    for k in keys_to_clear:
+        if k in st.session_state:
+            del st.session_state[k]
+    st.rerun()
+
 # ─── Interface ────────────────────────────────────────────────────────────────
 st.title("📖 Expert Lecteur / Lectrice")
 st.caption("Outil pédagogique basé sur la méthode Lector & Lectrix")
@@ -221,26 +239,44 @@ Son usage est pédagogique, gratuit et non commercial — il a vocation à encou
 tab_auto, tab_manual = st.tabs(["🤖 Stratégie automatique — l'IA choisit", "🎯 Stratégie choisie — je choisis"])
 
 def render_tab(tab_key, is_manual=False):
-    col1, col2 = st.columns([2, 1])
-    with col1:
+    # ── Ligne config : Cycle + bouton Réinitialiser ──────────────────────────
+    col_cycle, col_reset = st.columns([4, 1])
+    with col_cycle:
         cycle = st.selectbox("Cycle", CYCLES, index=1, key=f"cycle_{tab_key}")
+    with col_reset:
+        st.markdown("<div style='margin-top:28px'>", unsafe_allow_html=True)
+        if st.button("🔄 Réinitialiser", key=f"reset_{tab_key}", help="Vider le formulaire et recommencer"):
+            reset_tab(tab_key)
+        st.markdown("</div>", unsafe_allow_html=True)
+
     if is_manual:
         strat_options = [f"{k} · {v}" for k, v in STRATEGIES.items()]
         strat_choice = st.selectbox("🎯 Stratégie à travailler", strat_options, key="strat_select")
         strat_num = strat_choice[0]
 
     st.markdown("**Support de lecture**")
+
+    # ── Upload avec filtre étendu pour capturer les docx/odt ─────────────────
     uploaded = st.file_uploader(
         "PDF, JPEG, PNG, WebP, GIF",
-        type=["pdf", "jpg", "jpeg", "png", "webp", "gif", "heic"],
+        type=["pdf", "jpg", "jpeg", "png", "webp", "gif", "heic",
+              "docx", "doc", "odt", "rtf"],   # acceptés pour afficher le bon message
         key=f"file_{tab_key}"
     )
 
-    # Avertissement Word/ODT
-    if uploaded and uploaded.type in DOCX_MIME:
-        st.warning("💡 **Fichier Word / ODT détecté.** Ce format n'est pas supporté directement.\n\n"
-                   "Solution simple : ouvrez le document → **Ctrl+A → Ctrl+C** puis collez le texte ci-dessous 👇")
-        uploaded = None
+    # ── Message personnalisé Word/ODT ─────────────────────────────────────────
+    if is_word_file(uploaded):
+        st.markdown("""
+        <div style="background:#fffbe6; border-left:5px solid #c8972a; border-radius:6px;
+                    padding:14px 18px; margin-bottom:10px; font-size:0.93em;">
+            💡 <strong>Fichier Word / ODT détecté</strong><br><br>
+            Ce format ne peut pas être envoyé directement à l'IA.<br>
+            La solution la plus simple :<br>
+            <strong>Ouvrez votre document → Ctrl+A → Ctrl+C</strong><br>
+            puis collez le texte dans la zone ci-dessous 👇
+        </div>
+        """, unsafe_allow_html=True)
+        uploaded = None   # on ignore le fichier
 
     st.markdown("<p style='text-align:center; color:#aaa; font-weight:bold; margin:4px 0;'>— OU —</p>",
                 unsafe_allow_html=True)
@@ -277,7 +313,6 @@ def render_tab(tab_key, is_manual=False):
         result, cycle_saved, strat_saved = st.session_state[f"result_{tab_key}"]
         st.markdown("---")
         st.markdown("**Fiche de séance générée**")
-        # Affichage avec rendu markdown natif de Streamlit
         st.markdown(result)
 
         fname = f"Fiche_Lector_{cycle_saved.replace(' ','_')}{strat_saved.replace(' ','_')}.docx"
