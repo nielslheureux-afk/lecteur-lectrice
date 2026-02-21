@@ -64,7 +64,7 @@ STRATEGIES = {
     "6": "Le choix de stratégies de réponse (Catégoriser les questions)",
 }
 
-CYCLES = ["Cycle 2 (CE1/CE2)", "Cycle 3 (CM1/CM2/6ème)"]
+CYCLES = ["Cycle 2 — Lectorino & Lectorinette (CP/CE1/CE2)", "Cycle 3 — Lector & Lectrix (CM1/CM2/6ème)"]
 
 ACCEPTED_MIME = {
     "application/pdf",
@@ -77,19 +77,42 @@ DOCX_MIME = {
     "application/vnd.oasis.opendocument.text",
 }
 
-PROMPT_BASE = """Agis en tant qu'expert pédagogique Lector/Lectrix pour le {cycle}.
+# ─── Fonctions utilitaires ────────────────────────────────────────────────────
+def is_cycle2(cycle):
+    return cycle.startswith("Cycle 2")
 
-Rédige une fiche de préparation complète (1 à 2 pages) structurée ainsi :
-- TITRE DE LA SÉANCE & STRATÉGIE RETENUE
+FICHE_STRUCTURE_C3 = """- TITRE DE LA SÉANCE & STRATÉGIE RETENUE
 - JUSTIFICATION : Pourquoi cette stratégie est-elle adaptée à ce texte ?
 - OBJECTIF PÉDAGOGIQUE : En lien avec les programmes.
 - MODÉLISATION (Le "Haut-parleur sur la pensée") : Rédige le script détaillé de ce que l'enseignant dit aux élèves pour montrer comment il utilise la stratégie.
 - DÉROULEMENT : Phases de pratique guidée et autonome.
 - CONSEILS D'ÉTAYAGE : Pour les élèves en difficulté."""
 
-# ─── Fonctions utilitaires ────────────────────────────────────────────────────
+FICHE_STRUCTURE_C2 = """- TITRE DE LA SÉANCE & PRIORITÉ TRAVAILLÉE
+- JUSTIFICATION : Pourquoi cette priorité est-elle adaptée à ce texte et à ce niveau de classe ?
+- OBJECTIF PÉDAGOGIQUE : En lien avec les programmes du cycle 2.
+- TRAVAIL SUR LE VOCABULAIRE : Identifie 3 à 5 mots ou expressions du texte à travailler explicitement, avec une proposition d'activité courte pour les ancrer.
+- MODÉLISATION (Le "Haut-parleur sur la pensée") : Rédige le script détaillé de ce que l'enseignant dit à voix haute pour montrer comment il comprend le texte — en insistant sur la narration orale et le "film intérieur".
+- DÉROULEMENT : Phases collectives (lecture à voix haute par l'enseignant, reformulation orale) et phases guidées (activités de compréhension progressives).
+- CONSEILS D'ÉTAYAGE : Pour les élèves en difficulté, avec des suggestions pour s'appuyer sur l'oral et les images."""
+
 def build_prompt_auto(cycle):
-    return f"""Agis en tant qu'expert pédagogique Lector/Lectrix pour le {cycle}.
+    if is_cycle2(cycle):
+        return f"""Agis en tant qu'expert pédagogique de la méthode Lectorino & Lectorinette pour le {cycle}.
+
+Ce niveau travaille exclusivement des textes narratifs (albums de littérature jeunesse).
+La méthode s'articule autour de 4 priorités — pas de "stratégies" numérotées comme au cycle 3.
+
+Étape 1 : Analyse le texte fourni et choisis la priorité la plus pertinente parmi ces 4 :
+1. Fluidité de lecture à voix haute (automatisation du décodage et lecture expressive).
+2. Vocabulaire (enrichissement en réception et en production, suppléer aux mots inconnus).
+3. Compétences narratives (construire une représentation mentale ; apprendre à raconter l'histoire).
+4. Compréhension de l'implicite (reformulation des inférences causales ; explicitation des états mentaux des personnages : ce qu'ils pensent, ressentent, veulent).
+
+Étape 2 : Rédige une fiche de préparation complète structurée ainsi :
+{FICHE_STRUCTURE_C2}"""
+    else:
+        return f"""Agis en tant qu'expert pédagogique de la méthode Lector & Lectrix pour le {cycle}.
 
 Étape 1 : Analyse le texte fourni et choisis la stratégie la plus pertinente parmi ces 6 :
 1. Construire une représentation mentale (Faire le film).
@@ -99,16 +122,34 @@ def build_prompt_auto(cycle):
 5. Les pensées des personnages (Buts, mobiles, sentiments).
 6. Le choix de stratégies de réponse (Catégoriser les questions).
 
-Étape 2 : {PROMPT_BASE.format(cycle=cycle)}"""
+Étape 2 : Rédige une fiche de préparation complète structurée ainsi :
+{FICHE_STRUCTURE_C3}"""
 
 def build_prompt_manual(cycle, strat_num):
-    name = STRATEGIES[strat_num]
-    return f"""Agis en tant qu'expert pédagogique Lector/Lectrix pour le {cycle}.
+    if is_cycle2(cycle):
+        c2_strategies = {
+            "1": "Fluidité de lecture à voix haute (automatisation du décodage et lecture expressive)",
+            "2": "Vocabulaire (enrichissement en réception et en production, suppléer aux mots inconnus)",
+            "3": "Compétences narratives (construire une représentation mentale ; apprendre à raconter)",
+            "4": "Compréhension de l'implicite (inférences causales et états mentaux des personnages)",
+        }
+        name = c2_strategies.get(strat_num, c2_strategies["1"])
+        return f"""Agis en tant qu'expert pédagogique de la méthode Lectorino & Lectorinette pour le {cycle}.
+
+L'enseignant a choisi de travailler la priorité suivante : "{strat_num}. {name}".
+Ne remets pas en question ce choix ; construis directement la fiche en t'appuyant sur cette priorité appliquée au texte narratif fourni.
+
+Rédige une fiche de préparation complète structurée ainsi :
+{FICHE_STRUCTURE_C2}"""
+    else:
+        name = STRATEGIES[strat_num]
+        return f"""Agis en tant qu'expert pédagogique de la méthode Lector & Lectrix pour le {cycle}.
 
 L'enseignant a choisi de travailler la stratégie suivante : "{strat_num}. {name}".
 Ne remets pas en question ce choix ; construis directement la fiche en t'appuyant sur cette stratégie appliquée au texte fourni.
 
-{PROMPT_BASE.format(cycle=cycle)}"""
+Rédige une fiche de préparation complète structurée ainsi :
+{FICHE_STRUCTURE_C3}"""
 
 def call_gemini(prompt, uploaded_file=None, pasted_text=None):
     model = genai.GenerativeModel("gemini-2.5-flash")
@@ -230,11 +271,12 @@ st.caption("Outil pédagogique basé sur la méthode Lector & Lectrix")
 
 st.markdown("""
 <div class="mention">
-📚 Cet outil génère des fiches de préparation inspirées de la méthode
-<strong>Lector &amp; Lectrix</strong> de <strong>Sylvie Cèbe et Roland Goigoux</strong> (Éditions Retz).
-Il ne se substitue pas à l'ouvrage et n'est pas affilié à ses auteurs.
+📚 Cet outil génère des fiches de préparation inspirées des méthodes
+<strong>Lector &amp; Lectrix</strong> (cycle 3) et <strong>Lectorino &amp; Lectorinette</strong> (cycle 2)
+de <strong>Sylvie Cèbe et Roland Goigoux</strong> (Éditions Retz).
+Il ne se substitue pas aux ouvrages et n'est pas affilié à leurs auteurs.
 Son usage est pédagogique, gratuit et non commercial — il a vocation à encourager les enseignants
-à s'approprier cette méthode et à l'intégrer dans leur pratique.
+à s'approprier ces méthodes et à les intégrer dans leur pratique.
 </div>
 """, unsafe_allow_html=True)
 
@@ -255,8 +297,20 @@ def render_tab(tab_key, is_manual=False):
         st.markdown("</div>", unsafe_allow_html=True)
 
     if is_manual:
-        strat_options = [f"{k} · {v}" for k, v in STRATEGIES.items()]
-        strat_choice = st.selectbox("🎯 Stratégie à travailler", strat_options, key=f"strat_select_{rc}")
+        c2_mode = is_cycle2(cycle)
+        if c2_mode:
+            strat_options_c2 = {
+                "1": "Fluidité de lecture à voix haute",
+                "2": "Vocabulaire (réception et production)",
+                "3": "Compétences narratives (représentation mentale + raconter)",
+                "4": "Compréhension de l'implicite (inférences + états mentaux)",
+            }
+            opts = [f"{k} · {v}" for k, v in strat_options_c2.items()]
+            label = "🎯 Priorité Lectorino & Lectorinette à travailler"
+        else:
+            opts = [f"{k} · {v}" for k, v in STRATEGIES.items()]
+            label = "🎯 Stratégie Lector & Lectrix à travailler"
+        strat_choice = st.selectbox(label, opts, key=f"strat_select_{rc}")
         strat_num = strat_choice[0]
 
     st.markdown("**Support de lecture**")
@@ -311,7 +365,10 @@ def render_tab(tab_key, is_manual=False):
             try:
                 if is_manual:
                     prompt = build_prompt_manual(cycle, strat_num)
-                    strat_label = f" · Stratégie {strat_num}"
+                    if is_cycle2(cycle):
+                        strat_label = f" · Priorité {strat_num}"
+                    else:
+                        strat_label = f" · Stratégie {strat_num}"
                 else:
                     prompt = build_prompt_auto(cycle)
                     strat_label = " · Stratégie automatique"
