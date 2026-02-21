@@ -44,12 +44,12 @@ st.markdown("""
 
 # ─── Clé API (secret Streamlit) ───────────────────────────────────────────────
 try:
-    API_KEY = st.secrets["GEMINI_API_KEY"]
+    API_KEY = st.secrets["GEMINI_API_KEY_2"]
 except Exception:
     API_KEY = None
 
 if not API_KEY:
-    st.error("⚠️ Clé API Gemini manquante. Ajoutez GEMINI_API_KEY dans les secrets Streamlit.")
+    st.error("⚠️ Clé API Gemini manquante. Ajoutez GEMINI_API_KEY_2 dans les secrets Streamlit.")
     st.stop()
 
 genai.configure(api_key=API_KEY)
