@@ -8,7 +8,7 @@ from xml.sax.saxutils import escape as xml_escape
 
 # ─── Configuration page ───────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Expert Lecteur / Lectrice",
+    page_title="Lecteur / Lectrice",
     page_icon="📖",
     layout="centered"
 )
